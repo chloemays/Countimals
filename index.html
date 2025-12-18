@@ -1,0 +1,1153 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+  <meta charset="UTF-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1.0">
+  <title>Countimals</title>
+  <script src="https://unpkg.com/react@18/umd/react.production.min.js" crossorigin></script>
+  <script src="https://unpkg.com/react-dom@18/umd/react-dom.production.min.js" crossorigin></script>
+  <script src="https://unpkg.com/@babel/standalone/babel.min.js"></script>
+</head>
+<body>
+  <div id="root"></div>
+  <script type="text/babel">
+    const { useState, useEffect, useCallback, useRef } = React;
+
+    // Sound effects using Web Audio API
+    const audioContext = new (window.AudioContext || window.webkitAudioContext)();
+
+    const playSound = (type) => {
+      const oscillator = audioContext.createOscillator();
+      const gainNode = audioContext.createGain();
+      oscillator.connect(gainNode);
+      gainNode.connect(audioContext.destination);
+
+      switch(type) {
+        case 'tap':
+          oscillator.frequency.setValueAtTime(800, audioContext.currentTime);
+          oscillator.frequency.exponentialRampToValueAtTime(600, audioContext.currentTime + 0.1);
+          gainNode.gain.setValueAtTime(0.3, audioContext.currentTime);
+          gainNode.gain.exponentialRampToValueAtTime(0.01, audioContext.currentTime + 0.1);
+          oscillator.start(audioContext.currentTime);
+          oscillator.stop(audioContext.currentTime + 0.1);
+          break;
+        case 'correct':
+          oscillator.frequency.setValueAtTime(523, audioContext.currentTime);
+          oscillator.frequency.setValueAtTime(659, audioContext.currentTime + 0.1);
+          oscillator.frequency.setValueAtTime(784, audioContext.currentTime + 0.2);
+          gainNode.gain.setValueAtTime(0.3, audioContext.currentTime);
+          gainNode.gain.exponentialRampToValueAtTime(0.01, audioContext.currentTime + 0.3);
+          oscillator.start(audioContext.currentTime);
+          oscillator.stop(audioContext.currentTime + 0.3);
+          break;
+        case 'wrong':
+          oscillator.frequency.setValueAtTime(200, audioContext.currentTime);
+          oscillator.frequency.exponentialRampToValueAtTime(150, audioContext.currentTime + 0.2);
+          gainNode.gain.setValueAtTime(0.2, audioContext.currentTime);
+          gainNode.gain.exponentialRampToValueAtTime(0.01, audioContext.currentTime + 0.2);
+          oscillator.start(audioContext.currentTime);
+          oscillator.stop(audioContext.currentTime + 0.2);
+          break;
+        case 'pop':
+          oscillator.frequency.setValueAtTime(400, audioContext.currentTime);
+          oscillator.frequency.exponentialRampToValueAtTime(800, audioContext.currentTime + 0.05);
+          gainNode.gain.setValueAtTime(0.2, audioContext.currentTime);
+          gainNode.gain.exponentialRampToValueAtTime(0.01, audioContext.currentTime + 0.08);
+          oscillator.start(audioContext.currentTime);
+          oscillator.stop(audioContext.currentTime + 0.08);
+          break;
+        case 'count':
+          oscillator.frequency.setValueAtTime(600 + Math.random() * 200, audioContext.currentTime);
+          gainNode.gain.setValueAtTime(0.15, audioContext.currentTime);
+          gainNode.gain.exponentialRampToValueAtTime(0.01, audioContext.currentTime + 0.1);
+          oscillator.start(audioContext.currentTime);
+          oscillator.stop(audioContext.currentTime + 0.1);
+          break;
+      }
+    };
+
+    const animals = ['🐶', '🐱', '🐰', '🐻', '🦊', '🐸', '🦋', '🐢', '🐙', '🦀', '🐠', '🐥', '🐷', '🦁', '🐨'];
+    const celebrationEmojis = ['⭐', '🌟', '✨', '💫', '🎉', '🎈', '💖', '🌈'];
+    const encouragements = ['Great job!', 'Amazing!', 'Wow!', 'Super!', 'Yay!', 'Awesome!', 'Perfect!', 'You did it!'];
+
+    function adjustColor(color, amount) {
+      const hex = color.replace('#', '');
+      const num = parseInt(hex, 16);
+      const r = Math.min(255, Math.max(0, (num >> 16) + amount));
+      const g = Math.min(255, Math.max(0, ((num >> 8) & 0x00FF) + amount));
+      const b = Math.min(255, Math.max(0, (num & 0x0000FF) + amount));
+      return `#${(1 << 24 | r << 16 | g << 8 | b).toString(16).slice(1)}`;
+    }
+
+    const Celebration = ({ active }) => {
+      const [particles, setParticles] = useState([]);
+
+      useEffect(() => {
+        if (active) {
+          const newParticles = Array.from({ length: 20 }, (_, i) => ({
+            id: i,
+            emoji: celebrationEmojis[Math.floor(Math.random() * celebrationEmojis.length)],
+            left: Math.random() * 100,
+            delay: Math.random() * 0.5,
+            duration: 1.5 + Math.random(),
+          }));
+          setParticles(newParticles);
+          const timer = setTimeout(() => setParticles([]), 2000);
+          return () => clearTimeout(timer);
+        }
+      }, [active]);
+
+      return (
+        <div style={{ position: 'fixed', inset: 0, pointerEvents: 'none', overflow: 'hidden', zIndex: 1000 }}>
+          {particles.map(p => (
+            <div key={p.id} style={{
+              position: 'absolute', left: `${p.left}%`, top: '-50px', fontSize: '40px',
+              animation: `fall ${p.duration}s ease-out ${p.delay}s forwards`,
+            }}>{p.emoji}</div>
+          ))}
+        </div>
+      );
+    };
+
+    const NumberDisplay = ({ number, color = '#FF6B9D', size = 120 }) => (
+      <div style={{
+        fontSize: `${size}px`, fontFamily: '"Fredoka One", cursive', color: color,
+        textShadow: `4px 4px 0 ${adjustColor(color, -40)}`, lineHeight: 1,
+      }}>{number}</div>
+    );
+
+    const MathProblem = ({ a, b, operator, color }) => (
+      <div style={{
+        display: 'flex', alignItems: 'center', justifyContent: 'center', gap: '15px',
+        fontSize: '64px', fontFamily: '"Fredoka One", cursive', color: color,
+        textShadow: `3px 3px 0 ${adjustColor(color, -30)}`, marginBottom: '10px',
+      }}>
+        <span>{a}</span><span>{operator}</span><span>{b}</span><span>=</span><span>❓</span>
+      </div>
+    );
+
+    const Animal = ({ emoji, index, size = 60 }) => (
+      <div style={{
+        fontSize: size, animation: `popIn 0.4s cubic-bezier(0.34, 1.56, 0.64, 1) ${index * 0.08}s both`,
+        display: 'inline-block',
+      }}>{emoji}</div>
+    );
+
+    const HomeScreen = ({ onSelectMode }) => {
+      const mainModes = [
+        { id: 'counting', label: '123', color: '#FF6B9D', animal: '🐰' },
+        { id: 'moreless', label: '><', color: '#4ECDC4', animal: '🦊' },
+        { id: 'addition', label: '+', color: '#9B59B6', animal: '🐻' },
+        { id: 'subtraction', label: '-', color: '#27AE60', animal: '🐶' },
+      ];
+
+      const bonusModes = [
+        { id: 'maketen', label: 'Make 10!', color: '#DDA0DD', animal: '🦋' },
+        { id: 'playground', label: 'Play!', color: '#FFB347', animal: '🎪' },
+        { id: 'colors', label: 'Colors!', color: '#87CEEB', animal: '🎨' },
+      ];
+
+      return (
+        <div style={{ display: 'flex', flexDirection: 'column', alignItems: 'center', gap: '25px', padding: '20px' }}>
+          <h1 style={{
+            fontSize: '52px', fontFamily: '"Fredoka One", cursive',
+            background: 'linear-gradient(135deg, #FF6B9D, #4ECDC4, #F9D56E)',
+            WebkitBackgroundClip: 'text', WebkitTextFillColor: 'transparent',
+            margin: 0, animation: 'float 3s ease-in-out infinite',
+          }}>🐾 Countimals 🐾</h1>
+
+          <div style={{ fontSize: '18px', fontFamily: '"Fredoka One", cursive', color: '#888', marginTop: '-5px' }}>
+            Learn to count with animal friends!
+          </div>
+
+          <div style={{ fontSize: '60px', animation: 'wave 2s ease-in-out infinite' }}>🦁🐸🐱</div>
+
+          <div style={{ display: 'grid', gridTemplateColumns: 'repeat(2, 1fr)', gap: '20px', maxWidth: '350px' }}>
+            {mainModes.map((mode, i) => (
+              <button key={mode.id} onClick={() => { playSound('tap'); onSelectMode(mode.id); }} style={{
+                width: '140px', height: '140px', borderRadius: '30px', border: 'none',
+                background: `linear-gradient(145deg, ${mode.color}, ${adjustColor(mode.color, -15)})`,
+                boxShadow: '10px 10px 30px rgba(0,0,0,0.1), -5px -5px 15px rgba(255,255,255,0.8)',
+                cursor: 'pointer', display: 'flex', flexDirection: 'column', alignItems: 'center', justifyContent: 'center', gap: '8px',
+                animation: `popIn 0.5s cubic-bezier(0.34, 1.56, 0.64, 1) ${i * 0.1}s both`,
+              }}>
+                <span style={{ fontSize: '50px' }}>{mode.animal}</span>
+                <span style={{ fontSize: '28px', fontFamily: '"Fredoka One", cursive', color: 'white', textShadow: '2px 2px 4px rgba(0,0,0,0.2)' }}>{mode.label}</span>
+              </button>
+            ))}
+          </div>
+
+          <div style={{ display: 'flex', gap: '15px', flexWrap: 'wrap', justifyContent: 'center' }}>
+            {bonusModes.map((mode, i) => (
+              <button key={mode.id} onClick={() => { playSound('tap'); onSelectMode(mode.id); }} style={{
+                width: '100px', height: '100px', borderRadius: '25px', border: 'none',
+                background: `linear-gradient(145deg, ${mode.color}, ${adjustColor(mode.color, -15)})`,
+                boxShadow: '8px 8px 25px rgba(0,0,0,0.1)', cursor: 'pointer',
+                display: 'flex', flexDirection: 'column', alignItems: 'center', justifyContent: 'center', gap: '5px',
+                animation: `popIn 0.5s cubic-bezier(0.34, 1.56, 0.64, 1) ${0.4 + i * 0.1}s both`,
+              }}>
+                <span style={{ fontSize: '35px' }}>{mode.animal}</span>
+                <span style={{ fontSize: '14px', fontFamily: '"Fredoka One", cursive', color: 'white' }}>{mode.label}</span>
+              </button>
+            ))}
+          </div>
+        </div>
+      );
+    };
+
+    const CountingGame = ({ difficulty, onBack }) => {
+      // Easy: count to 10, Medium: count to 20, Hard: "How Many" quiz mode
+      const isHardMode = difficulty === 'hard';
+
+      // States for Easy/Medium tap-to-count mode
+      const [count, setCount] = useState(0);
+      const [currentAnimal, setCurrentAnimal] = useState(animals[0]);
+      const [animalList, setAnimalList] = useState([]);
+      const [celebrating, setCelebrating] = useState(false);
+      const maxCount = difficulty === 'easy' ? 10 : 20;
+
+      // States for Hard "How Many" mode
+      const [score, setScore] = useState(0);
+      const [targetCount, setTargetCount] = useState(5);
+      const [displayAnimals, setDisplayAnimals] = useState([]);
+      const [options, setOptions] = useState([]);
+      const [feedback, setFeedback] = useState(null);
+
+      // Generate a new "How Many" round
+      const generateHowMany = useCallback(() => {
+        const count = Math.floor(Math.random() * 12) + 3; // 3-14 animals
+        const animal = animals[Math.floor(Math.random() * animals.length)];
+        setTargetCount(count);
+        setDisplayAnimals(Array(count).fill(animal));
+
+        // Generate answer options
+        const opts = [count];
+        while (opts.length < 4) {
+          const wrong = count + (Math.random() > 0.5 ? 1 : -1) * (Math.floor(Math.random() * 3) + 1);
+          if (wrong > 0 && wrong <= 15 && !opts.includes(wrong)) opts.push(wrong);
+        }
+        setOptions(opts.sort(() => Math.random() - 0.5));
+        setFeedback(null);
+      }, []);
+
+      useEffect(() => {
+        if (isHardMode) generateHowMany();
+      }, [isHardMode, generateHowMany]);
+
+      // Easy/Medium: Add animal on tap
+      const addAnimal = () => {
+        if (count < maxCount) {
+          playSound('pop');
+          setAnimalList([...animalList, currentAnimal]);
+          setCount(count + 1);
+          if (count + 1 === maxCount) { playSound('correct'); setCelebrating(true); setTimeout(() => setCelebrating(false), 2000); }
+        }
+      };
+
+      const reset = () => { playSound('tap'); setCount(0); setAnimalList([]); setCurrentAnimal(animals[Math.floor(Math.random() * animals.length)]); };
+
+      // Hard mode: Handle answer selection
+      const handleAnswer = (answer) => {
+        playSound('tap');
+        if (answer === targetCount) {
+          playSound('correct');
+          setScore(score + 1);
+          setFeedback('correct');
+          setCelebrating(true);
+          setTimeout(() => { setCelebrating(false); generateHowMany(); }, 1500);
+        } else {
+          playSound('wrong');
+          setFeedback('wrong');
+          setTimeout(() => setFeedback(null), 800);
+        }
+      };
+
+      // Hard mode: "How Many" UI
+      if (isHardMode) {
+        return (
+          <div style={{ display: 'flex', flexDirection: 'column', alignItems: 'center', gap: '15px', padding: '20px' }}>
+            <Celebration active={celebrating} />
+            <button onClick={() => { playSound('tap'); onBack(); }} style={{ position: 'absolute', top: '20px', left: '20px', fontSize: '40px', background: 'none', border: 'none', cursor: 'pointer' }}>⬅️</button>
+            <div style={{ fontSize: '28px', fontFamily: '"Fredoka One", cursive', color: '#FF6B9D' }}>⭐ {score}</div>
+            <h2 style={{ fontSize: '32px', fontFamily: '"Fredoka One", cursive', color: '#FF6B9D', margin: 0 }}>How Many? 🔢</h2>
+
+            <div style={{
+              minHeight: '180px', width: '100%', maxWidth: '500px',
+              background: 'rgba(255,255,255,0.5)', borderRadius: '30px', padding: '20px',
+              display: 'flex', flexWrap: 'wrap', gap: '8px', justifyContent: 'center', alignItems: 'center'
+            }}>
+              {displayAnimals.map((animal, i) => <Animal key={i} emoji={animal} index={i} size={36} />)}
+            </div>
+
+            <div style={{ fontSize: '24px', fontFamily: '"Fredoka One", cursive', color: '#888' }}>
+              Count them all!
+            </div>
+
+            <div style={{ display: 'flex', gap: '15px', flexWrap: 'wrap', justifyContent: 'center' }}>
+              {options.map((opt, i) => (
+                <button key={i} onClick={() => handleAnswer(opt)} style={{
+                  width: '90px', height: '90px', borderRadius: '25px', border: 'none',
+                  background: 'linear-gradient(145deg, #FF6B9D, #E55A8A)', boxShadow: '8px 8px 20px rgba(0,0,0,0.1)',
+                  fontSize: '44px', fontFamily: '"Fredoka One", cursive', color: 'white', cursor: 'pointer',
+                }}>{opt}</button>
+              ))}
+            </div>
+
+            {feedback === 'correct' && <div style={{ fontSize: '48px', animation: 'bounce 0.3s' }}>✅ Yes! {targetCount}! 🎉</div>}
+            {feedback === 'wrong' && <div style={{ fontSize: '48px', animation: 'shake 0.3s' }}>Try again! 💪</div>}
+          </div>
+        );
+      }
+
+      // Easy/Medium: Tap to count UI
+      return (
+        <div style={{ display: 'flex', flexDirection: 'column', alignItems: 'center', gap: '15px', padding: '20px' }}>
+          <Celebration active={celebrating} />
+          <button onClick={() => { playSound('tap'); onBack(); }} style={{ position: 'absolute', top: '20px', left: '20px', fontSize: '40px', background: 'none', border: 'none', cursor: 'pointer' }}>⬅️</button>
+          <h2 style={{ fontSize: '32px', fontFamily: '"Fredoka One", cursive', color: '#FF6B9D', margin: 0 }}>
+            {difficulty === 'easy' ? 'Count to 10! 🎯' : 'Count to 20! 🎯'}
+          </h2>
+          <NumberDisplay number={count} color="#FF6B9D" />
+          <div style={{ minHeight: '120px', width: '100%', maxWidth: '500px', background: 'rgba(255,255,255,0.5)', borderRadius: '30px', padding: '20px', display: 'flex', flexWrap: 'wrap', gap: '8px', justifyContent: 'center' }}>
+            {animalList.map((animal, i) => <Animal key={i} emoji={animal} index={i} size={difficulty === 'medium' ? 30 : 40} />)}
+          </div>
+          <button onClick={addAnimal} disabled={count >= maxCount} style={{
+            width: '180px', height: '180px', borderRadius: '50%', border: 'none',
+            background: 'linear-gradient(145deg, #FF6B9D, #E55A8A)',
+            boxShadow: '8px 8px 20px rgba(0,0,0,0.15)', cursor: count >= maxCount ? 'not-allowed' : 'pointer',
+            display: 'flex', alignItems: 'center', justifyContent: 'center', fontSize: '90px', opacity: count >= maxCount ? 0.5 : 1,
+          }}>{currentAnimal}</button>
+          <button onClick={reset} style={{ padding: '10px 25px', borderRadius: '25px', border: 'none', background: 'linear-gradient(145deg, #4ECDC4, #3DB8B0)', fontSize: '20px', fontFamily: '"Fredoka One", cursive', color: 'white', cursor: 'pointer' }}>🔄 New Animal</button>
+          {count === maxCount && <div style={{ fontSize: '28px', fontFamily: '"Fredoka One", cursive', color: '#4ECDC4', animation: 'bounce 0.5s infinite' }}>🎉 You counted to {maxCount}! 🎉</div>}
+        </div>
+      );
+    };
+
+    const MoreLessGame = ({ difficulty, onBack }) => {
+      const [score, setScore] = useState(0);
+      const [numbers, setNumbers] = useState({ left: 0, right: 0 });
+      const [groups, setGroups] = useState({ left: [], right: [] });
+      const [question, setQuestion] = useState('more');
+      const [feedback, setFeedback] = useState(null);
+      const [celebrating, setCelebrating] = useState(false);
+      const showVisuals = difficulty === 'easy';
+
+      const generateRound = useCallback(() => {
+        const maxNum = difficulty === 'easy' ? 5 : difficulty === 'medium' ? 15 : 50;
+        const minNum = difficulty === 'hard' ? 5 : 1;
+        const leftCount = Math.floor(Math.random() * (maxNum - minNum)) + minNum;
+        let rightCount;
+        do { rightCount = Math.floor(Math.random() * (maxNum - minNum)) + minNum; } while (rightCount === leftCount);
+        const animal = animals[Math.floor(Math.random() * animals.length)];
+        setGroups({ left: Array(Math.min(leftCount, 10)).fill(animal), right: Array(Math.min(rightCount, 10)).fill(animal) });
+        setNumbers({ left: leftCount, right: rightCount });
+        setQuestion(Math.random() > 0.5 ? 'more' : 'less');
+        setFeedback(null);
+      }, [difficulty]);
+
+      useEffect(() => { generateRound(); }, [generateRound]);
+
+      const handleChoice = (side) => {
+        playSound('tap');
+        const leftMore = numbers.left > numbers.right;
+        const correct = (question === 'more' && ((side === 'left' && leftMore) || (side === 'right' && !leftMore))) ||
+                       (question === 'less' && ((side === 'left' && !leftMore) || (side === 'right' && leftMore)));
+        if (correct) { playSound('correct'); setScore(score + 1); setFeedback('correct'); setCelebrating(true); setTimeout(() => { setCelebrating(false); generateRound(); }, 1500); }
+        else { playSound('wrong'); setFeedback('wrong'); setTimeout(() => setFeedback(null), 1000); }
+      };
+
+      return (
+        <div style={{ display: 'flex', flexDirection: 'column', alignItems: 'center', gap: '20px', padding: '20px' }}>
+          <Celebration active={celebrating} />
+          <button onClick={() => { playSound('tap'); onBack(); }} style={{ position: 'absolute', top: '20px', left: '20px', fontSize: '40px', background: 'none', border: 'none', cursor: 'pointer' }}>⬅️</button>
+          <div style={{ fontSize: '28px', fontFamily: '"Fredoka One", cursive', color: '#4ECDC4' }}>⭐ {score}</div>
+          <h2 style={{ fontSize: '36px', fontFamily: '"Fredoka One", cursive', color: '#4ECDC4', margin: 0 }}>Which is {question === 'more' ? 'MORE' : 'LESS'}? {question === 'more' ? '📈' : '📉'}</h2>
+          {difficulty === 'hard' && <div style={{ fontSize: '20px', color: '#888', fontFamily: '"Fredoka One", cursive' }}>🧠 Big Kid Mode!</div>}
+          <div style={{ display: 'flex', gap: '30px', justifyContent: 'center', flexWrap: 'wrap' }}>
+            {['left', 'right'].map((side) => (
+              <button key={side} onClick={() => handleChoice(side)} style={{
+                width: showVisuals ? '180px' : '150px', minHeight: showVisuals ? '200px' : '150px', borderRadius: '30px', border: '5px solid transparent',
+                background: 'rgba(255,255,255,0.7)', padding: '20px', cursor: 'pointer', display: 'flex', flexDirection: 'column', gap: '8px', justifyContent: 'center', alignItems: 'center',
+              }}>
+                {!showVisuals && <div style={{ fontSize: difficulty === 'hard' ? '72px' : '48px', fontFamily: '"Fredoka One", cursive', color: '#4ECDC4' }}>{numbers[side]}</div>}
+                {showVisuals && <div style={{ display: 'flex', flexWrap: 'wrap', gap: '8px', justifyContent: 'center' }}>{groups[side].map((animal, i) => <Animal key={i} emoji={animal} index={i} size={40} />)}</div>}
+              </button>
+            ))}
+          </div>
+          {feedback === 'correct' && <div style={{ fontSize: '48px', animation: 'bounce 0.3s' }}>✅ Yes! 🎉</div>}
+          {feedback === 'wrong' && <div style={{ fontSize: '48px', animation: 'shake 0.3s' }}>Try again! 💪</div>}
+        </div>
+      );
+    };
+
+    const AdditionGame = ({ difficulty, onBack }) => {
+      const [score, setScore] = useState(0);
+      const [problem, setProblem] = useState({ a: 1, b: 1, animal: '🐶' });
+      const [options, setOptions] = useState([]);
+      const [feedback, setFeedback] = useState(null);
+      const [celebrating, setCelebrating] = useState(false);
+      const [showCountingHint, setShowCountingHint] = useState(false);
+      const [countingProgress, setCountingProgress] = useState(0);
+      const showVisuals = difficulty !== 'hard';
+      const visualSize = difficulty === 'easy' ? 35 : 25;
+      const isMedium = difficulty === 'medium';
+
+      const generateProblem = useCallback(() => {
+        const maxNum = difficulty === 'easy' ? 4 : difficulty === 'medium' ? 6 : 9;
+        const a = Math.floor(Math.random() * maxNum) + 1;
+        const b = Math.floor(Math.random() * maxNum) + 1;
+        const animal = animals[Math.floor(Math.random() * animals.length)];
+        const correct = a + b;
+        const opts = [correct];
+        while (opts.length < 3) { const wrong = correct + (Math.random() > 0.5 ? 1 : -1) * (Math.floor(Math.random() * 3) + 1); if (wrong > 0 && !opts.includes(wrong)) opts.push(wrong); }
+        setProblem({ a, b, animal }); setOptions(opts.sort(() => Math.random() - 0.5)); setFeedback(null); setShowCountingHint(false); setCountingProgress(0);
+      }, [difficulty]);
+
+      useEffect(() => { generateProblem(); }, [generateProblem]);
+
+      // Animate counting hint when wrong
+      useEffect(() => {
+        if (showCountingHint && countingProgress < problem.b) {
+          const timer = setTimeout(() => {
+            playSound('count');
+            setCountingProgress(prev => prev + 1);
+          }, 600);
+          return () => clearTimeout(timer);
+        }
+      }, [showCountingHint, countingProgress, problem.b]);
+
+      const handleAnswer = (answer) => {
+        playSound('tap');
+        if (answer === problem.a + problem.b) {
+          playSound('correct');
+          setScore(score + 1);
+          setFeedback('correct');
+          setCelebrating(true);
+          setTimeout(() => { setCelebrating(false); generateProblem(); }, 1500);
+        }
+        else {
+          playSound('wrong');
+          setFeedback('wrong');
+          if (isMedium) {
+            setShowCountingHint(true);
+            setCountingProgress(0);
+          }
+          setTimeout(() => { setFeedback(null); if (!isMedium) setShowCountingHint(false); }, isMedium ? 4000 : 800);
+        }
+      };
+
+      return (
+        <div style={{ display: 'flex', flexDirection: 'column', alignItems: 'center', gap: '20px', padding: '20px' }}>
+          <Celebration active={celebrating} />
+          <button onClick={() => { playSound('tap'); onBack(); }} style={{ position: 'absolute', top: '20px', left: '20px', fontSize: '40px', background: 'none', border: 'none', cursor: 'pointer' }}>⬅️</button>
+          <div style={{ fontSize: '28px', fontFamily: '"Fredoka One", cursive', color: '#9B59B6' }}>⭐ {score}</div>
+          <h2 style={{ fontSize: '32px', fontFamily: '"Fredoka One", cursive', color: '#9B59B6', margin: 0 }}>
+            {isMedium ? 'Count On! ➕' : 'Add Together! ➕'}
+          </h2>
+          <MathProblem a={problem.a} b={problem.b} operator="+" color="#9B59B6" />
+
+          {/* Easy mode: both numbers as visuals */}
+          {difficulty === 'easy' && (
+            <div style={{ display: 'flex', alignItems: 'center', gap: '15px', flexWrap: 'wrap', justifyContent: 'center' }}>
+              <div style={{ background: 'rgba(255,255,255,0.7)', borderRadius: '20px', padding: '15px', display: 'flex', gap: '5px', flexWrap: 'wrap', maxWidth: '150px', justifyContent: 'center' }}>
+                {Array(problem.a).fill(problem.animal).map((a, i) => <Animal key={i} emoji={a} index={i} size={visualSize} />)}
+              </div>
+              <span style={{ fontSize: '40px', color: '#9B59B6' }}>+</span>
+              <div style={{ background: 'rgba(255,255,255,0.7)', borderRadius: '20px', padding: '15px', display: 'flex', gap: '5px', flexWrap: 'wrap', maxWidth: '150px', justifyContent: 'center' }}>
+                {Array(problem.b).fill(problem.animal).map((a, i) => <Animal key={i} emoji={a} index={i} size={visualSize} />)}
+              </div>
+            </div>
+          )}
+
+          {/* Medium mode: first number written, second as visuals with counting on */}
+          {isMedium && (
+            <div style={{ display: 'flex', alignItems: 'center', gap: '15px', flexWrap: 'wrap', justifyContent: 'center' }}>
+              {/* First number as written digit */}
+              <div style={{
+                background: 'rgba(255,255,255,0.7)',
+                borderRadius: '20px',
+                padding: '15px 25px',
+                display: 'flex',
+                alignItems: 'center',
+                justifyContent: 'center',
+                minWidth: '80px',
+                minHeight: '80px'
+              }}>
+                <span style={{
+                  fontSize: '64px',
+                  fontFamily: '"Fredoka One", cursive',
+                  color: '#9B59B6',
+                  textShadow: '3px 3px 0 rgba(0,0,0,0.1)'
+                }}>{problem.a}</span>
+              </div>
+              <span style={{ fontSize: '40px', color: '#9B59B6' }}>+</span>
+              {/* Second number as visuals with counting numbers underneath */}
+              <div style={{
+                background: 'rgba(255,255,255,0.7)',
+                borderRadius: '20px',
+                padding: '15px',
+                display: 'flex',
+                gap: '8px',
+                flexWrap: 'wrap',
+                maxWidth: '200px',
+                justifyContent: 'center'
+              }}>
+                {Array(problem.b).fill(problem.animal).map((a, i) => (
+                  <div key={i} style={{ display: 'flex', flexDirection: 'column', alignItems: 'center', gap: '2px' }}>
+                    <Animal emoji={a} index={i} size={visualSize} />
+                    {/* Counting hint numbers that appear when wrong */}
+                    {showCountingHint && (
+                      <span style={{
+                        fontSize: '16px',
+                        fontFamily: '"Fredoka One", cursive',
+                        color: i < countingProgress ? '#95E1D3' : '#ccc',
+                        opacity: i < countingProgress ? 1 : 0.4,
+                        transition: 'all 0.3s ease',
+                        transform: i < countingProgress ? 'scale(1.2)' : 'scale(1)',
+                        textShadow: i < countingProgress ? '1px 1px 2px rgba(0,0,0,0.2)' : 'none'
+                      }}>
+                        {problem.a + i + 1}
+                      </span>
+                    )}
+                  </div>
+                ))}
+              </div>
+            </div>
+          )}
+
+          {/* Medium mode hint text */}
+          {isMedium && !showCountingHint && (
+            <div style={{ fontSize: '18px', color: '#888', fontFamily: '"Fredoka One", cursive' }}>
+              Start at {problem.a}, count on!
+            </div>
+          )}
+
+          {!showVisuals && <div style={{ fontSize: '20px', color: '#888', fontFamily: '"Fredoka One", cursive' }}>🧠 Big Kid Mode!</div>}
+          <div style={{ display: 'flex', gap: '20px', flexWrap: 'wrap', justifyContent: 'center', marginTop: '10px' }}>
+            {options.map((opt, i) => (
+              <button key={i} onClick={() => handleAnswer(opt)} style={{
+                width: '100px', height: '100px', borderRadius: '25px', border: 'none',
+                background: 'linear-gradient(145deg, #9B59B6, #8E44AD)', boxShadow: '8px 8px 20px rgba(0,0,0,0.1)',
+                fontSize: '48px', fontFamily: '"Fredoka One", cursive', color: 'white', cursor: 'pointer',
+              }}>{opt}</button>
+            ))}
+          </div>
+          {feedback === 'correct' && <div style={{ fontSize: '48px', animation: 'bounce 0.3s' }}>✅ Yay! 🎉</div>}
+          {feedback === 'wrong' && <div style={{ fontSize: '48px', animation: 'shake 0.3s' }}>Try again! 💪</div>}
+        </div>
+      );
+    };
+
+    const SubtractionGame = ({ difficulty, onBack }) => {
+      const [score, setScore] = useState(0);
+      const [problem, setProblem] = useState({ total: 3, remove: 1, animal: '🐶' });
+      const [options, setOptions] = useState([]);
+      const [feedback, setFeedback] = useState(null);
+      const [fadedOut, setFadedOut] = useState([]);
+      const [celebrating, setCelebrating] = useState(false);
+      const [animationStarted, setAnimationStarted] = useState(false);
+      const showVisuals = difficulty !== 'hard';
+      const visualSize = difficulty === 'easy' ? 35 : 25;
+
+      const generateProblem = useCallback(() => {
+        const maxNum = difficulty === 'easy' ? 6 : difficulty === 'medium' ? 9 : 12;
+        const total = Math.floor(Math.random() * (maxNum - 2)) + 3;
+        const remove = Math.floor(Math.random() * (total - 1)) + 1;
+        const animal = animals[Math.floor(Math.random() * animals.length)];
+        const correct = total - remove;
+        const opts = [correct];
+        while (opts.length < 3) { const wrong = correct + (Math.random() > 0.5 ? 1 : -1) * (Math.floor(Math.random() * 3) + 1); if (wrong >= 0 && wrong <= total && !opts.includes(wrong)) opts.push(wrong); }
+        setProblem({ total, remove, animal }); setOptions(opts.sort(() => Math.random() - 0.5)); setFadedOut([]); setAnimationStarted(false); setFeedback(null);
+        setTimeout(() => setAnimationStarted(true), 500);
+      }, [difficulty]);
+
+      useEffect(() => { generateProblem(); }, [generateProblem]);
+
+      useEffect(() => {
+        if (showVisuals && animationStarted && fadedOut.length < problem.remove) {
+          const timer = setTimeout(() => { setFadedOut([...fadedOut, fadedOut.length]); }, 1200);
+          return () => clearTimeout(timer);
+        }
+      }, [fadedOut, problem.remove, showVisuals, animationStarted]);
+
+      const handleAnswer = (answer) => {
+        playSound('tap');
+        if (answer === problem.total - problem.remove) { playSound('correct'); setScore(score + 1); setFeedback('correct'); setCelebrating(true); setTimeout(() => { setCelebrating(false); generateProblem(); }, 1500); }
+        else { playSound('wrong'); setFeedback('wrong'); setTimeout(() => setFeedback(null), 800); }
+      };
+
+      return (
+        <div style={{ display: 'flex', flexDirection: 'column', alignItems: 'center', gap: '20px', padding: '20px' }}>
+          <Celebration active={celebrating} />
+          <button onClick={() => { playSound('tap'); onBack(); }} style={{ position: 'absolute', top: '20px', left: '20px', fontSize: '40px', background: 'none', border: 'none', cursor: 'pointer' }}>⬅️</button>
+          <div style={{ fontSize: '28px', fontFamily: '"Fredoka One", cursive', color: '#27AE60' }}>⭐ {score}</div>
+          <h2 style={{ fontSize: '32px', fontFamily: '"Fredoka One", cursive', color: '#27AE60', margin: 0 }}>Take Away! ➖</h2>
+          <MathProblem a={problem.total} b={problem.remove} operator="−" color="#27AE60" />
+          {showVisuals && (
+            <div style={{ display: 'flex', alignItems: 'center', gap: '15px', justifyContent: 'center' }}>
+              <div style={{ background: 'rgba(255,255,255,0.7)', borderRadius: '20px', padding: '15px', display: 'flex', gap: '5px', flexWrap: 'wrap', maxWidth: '200px', justifyContent: 'center', minHeight: '60px' }}>
+                {Array(problem.total).fill(problem.animal).map((a, i) => {
+                  const willBeRemoved = i < problem.remove;
+                  const isFadedOut = fadedOut.includes(i);
+                  return (
+                    <div key={i} style={{ position: 'relative', display: 'inline-flex', alignItems: 'center', justifyContent: 'center', width: `${visualSize + 10}px`, height: `${visualSize + 10}px`, opacity: isFadedOut ? 0 : 1, transform: isFadedOut ? 'scale(0.3) translateY(-20px)' : 'scale(1)', transition: 'all 0.6s ease-out' }}>
+                      <span style={{ fontSize: `${visualSize}px`, lineHeight: 1 }}>{a}</span>
+                      {willBeRemoved && !isFadedOut && (
+                        <div style={{ position: 'absolute', top: 0, left: 0, right: 0, bottom: 0, display: 'flex', alignItems: 'center', justifyContent: 'center', fontSize: `${visualSize * 1.3}px`, color: '#FF6B6B', fontWeight: 'bold', textShadow: '2px 2px 0 white, -2px -2px 0 white', pointerEvents: 'none' }}>✕</div>
+                      )}
+                    </div>
+                  );
+                })}
+              </div>
+              <span style={{ fontSize: '30px' }}>👋</span>
+            </div>
+          )}
+          {!showVisuals && <div style={{ fontSize: '20px', color: '#888', fontFamily: '"Fredoka One", cursive' }}>🧠 Big Kid Mode!</div>}
+          <div style={{ display: 'flex', gap: '20px', flexWrap: 'wrap', justifyContent: 'center', marginTop: '10px' }}>
+            {options.map((opt, i) => (
+              <button key={i} onClick={() => handleAnswer(opt)} style={{
+                width: '100px', height: '100px', borderRadius: '25px', border: 'none',
+                background: 'linear-gradient(145deg, #27AE60, #219A52)', boxShadow: '8px 8px 20px rgba(0,0,0,0.1)',
+                fontSize: '48px', fontFamily: '"Fredoka One", cursive', color: 'white', cursor: 'pointer',
+              }}>{opt}</button>
+            ))}
+          </div>
+          {feedback === 'correct' && <div style={{ fontSize: '48px', animation: 'bounce 0.3s' }}>✅ Yay! 🎉</div>}
+          {feedback === 'wrong' && <div style={{ fontSize: '48px', animation: 'shake 0.3s' }}>Try again! 💪</div>}
+        </div>
+      );
+    };
+
+    const MakeTenGame = ({ difficulty, onBack }) => {
+      const [score, setScore] = useState(0);
+      const [given, setGiven] = useState(3);
+      const [options, setOptions] = useState([]);
+      const [feedback, setFeedback] = useState(null);
+      const [animal, setAnimal] = useState('🦋');
+      const [celebrating, setCelebrating] = useState(false);
+      const showVisuals = difficulty !== 'hard';
+
+      const generateProblem = useCallback(() => {
+        const newGiven = Math.floor(Math.random() * 9) + 1;
+        const correct = 10 - newGiven;
+        const newAnimal = animals[Math.floor(Math.random() * animals.length)];
+        const opts = [correct];
+        while (opts.length < 4) { const wrong = Math.floor(Math.random() * 10) + 1; if (!opts.includes(wrong) && wrong !== correct) opts.push(wrong); }
+        setGiven(newGiven); setAnimal(newAnimal); setOptions(opts.sort(() => Math.random() - 0.5)); setFeedback(null);
+      }, []);
+
+      useEffect(() => { generateProblem(); }, [generateProblem]);
+
+      const handleAnswer = (answer) => {
+        playSound('tap');
+        if (answer === 10 - given) { playSound('correct'); setScore(score + 1); setFeedback('correct'); setCelebrating(true); setTimeout(() => { setCelebrating(false); generateProblem(); }, 1500); }
+        else { playSound('wrong'); setFeedback('wrong'); setTimeout(() => setFeedback(null), 800); }
+      };
+
+      return (
+        <div style={{ display: 'flex', flexDirection: 'column', alignItems: 'center', gap: '20px', padding: '20px' }}>
+          <Celebration active={celebrating} />
+          <button onClick={() => { playSound('tap'); onBack(); }} style={{ position: 'absolute', top: '20px', left: '20px', fontSize: '40px', background: 'none', border: 'none', cursor: 'pointer' }}>⬅️</button>
+          <div style={{ fontSize: '28px', fontFamily: '"Fredoka One", cursive', color: '#DDA0DD' }}>⭐ {score}</div>
+          <h2 style={{ fontSize: '32px', fontFamily: '"Fredoka One", cursive', color: '#DDA0DD', margin: 0 }}>Make 10! 🔟</h2>
+          <div style={{ display: 'flex', alignItems: 'center', gap: '15px', fontSize: '64px', fontFamily: '"Fredoka One", cursive', color: '#DDA0DD' }}>
+            <span>{given}</span><span>+</span><span>❓</span><span>=</span><span style={{ fontSize: '72px' }}>🔟</span>
+          </div>
+          {showVisuals && (
+            <div style={{ display: 'grid', gridTemplateColumns: 'repeat(5, 1fr)', gap: '8px', background: 'rgba(255,255,255,0.7)', borderRadius: '20px', padding: '15px' }}>
+              {Array(10).fill(null).map((_, i) => (
+                <div key={i} style={{ width: '50px', height: '50px', borderRadius: '12px', border: '3px dashed #DDA0DD', display: 'flex', alignItems: 'center', justifyContent: 'center', fontSize: '30px', background: i < given ? 'rgba(221, 160, 221, 0.3)' : 'transparent' }}>
+                  {i < given ? animal : ''}
+                </div>
+              ))}
+            </div>
+          )}
+          {!showVisuals && <div style={{ fontSize: '20px', color: '#888', fontFamily: '"Fredoka One", cursive' }}>🧠 Big Kid Mode!</div>}
+          <div style={{ fontSize: '24px', fontFamily: '"Fredoka One", cursive', color: '#888' }}>How many more to make 10?</div>
+          <div style={{ display: 'flex', gap: '15px', flexWrap: 'wrap', justifyContent: 'center' }}>
+            {options.map((opt, i) => (
+              <button key={i} onClick={() => handleAnswer(opt)} style={{
+                width: '90px', height: '90px', borderRadius: '25px', border: 'none',
+                background: 'linear-gradient(145deg, #DDA0DD, #C890C8)', boxShadow: '8px 8px 20px rgba(0,0,0,0.1)',
+                fontSize: '44px', fontFamily: '"Fredoka One", cursive', color: 'white', cursor: 'pointer',
+              }}>{opt}</button>
+            ))}
+          </div>
+          {feedback === 'correct' && <div style={{ fontSize: '48px', animation: 'bounce 0.3s' }}>✅ Perfect 10! 🎉</div>}
+          {feedback === 'wrong' && <div style={{ fontSize: '48px', animation: 'shake 0.3s' }}>Try again! 💪</div>}
+        </div>
+      );
+    };
+
+    const PlaygroundMode = ({ onBack }) => {
+      const [spawnedItems, setSpawnedItems] = useState([]);
+      const [nextId, setNextId] = useState(0);
+      const [theme, setTheme] = useState('park');
+
+      const themes = {
+        park: {
+          name: '🌳 Park',
+          background: 'linear-gradient(180deg, #87CEEB 0%, #98FB98 100%)',
+          ground: '#228B22',
+          groundBase: '#8B4513',
+          items: ['🐶', '🐱', '🐰', '🐻', '🦊', '🐸', '🦋', '🐢', '🐿️', '🦆', '🐦', '🐝'],
+          decorations: [
+            { emoji: '☀️', top: '20px', right: '30px', size: '50px', animation: 'float 4s ease-in-out infinite' },
+            { emoji: '☁️', top: '30px', left: '20px', size: '40px', animation: 'float 6s ease-in-out infinite' },
+            { emoji: '☁️', top: '50px', left: '140px', size: '30px', animation: 'float 5s ease-in-out infinite 1s' },
+            { emoji: '🌸', top: '80px', right: '80px', size: '25px', animation: 'float 3s ease-in-out infinite' },
+          ],
+        },
+        space: {
+          name: '🚀 Space',
+          background: 'linear-gradient(180deg, #0a0a2e 0%, #1a1a4e 50%, #2d1b4e 100%)',
+          ground: '#2d2d2d',
+          groundBase: '#1a1a1a',
+          items: ['🚀', '👨‍🚀', '👩‍🚀', '🛸', '🌟', '⭐', '💫', '☄️', '🛰️', '🌙', '👽', '🤖'],
+          decorations: [
+            { emoji: '🌙', top: '20px', right: '30px', size: '50px', animation: 'float 6s ease-in-out infinite' },
+            { emoji: '⭐', top: '40px', left: '30px', size: '20px', animation: 'twinkle 2s ease-in-out infinite' },
+            { emoji: '⭐', top: '80px', left: '100px', size: '15px', animation: 'twinkle 2s ease-in-out infinite 0.5s' },
+            { emoji: '⭐', top: '30px', left: '200px', size: '18px', animation: 'twinkle 2s ease-in-out infinite 1s' },
+            { emoji: '🪐', top: '100px', right: '60px', size: '40px', animation: 'float 8s ease-in-out infinite' },
+            { emoji: '✨', top: '60px', left: '60px', size: '15px', animation: 'twinkle 1.5s ease-in-out infinite 0.3s' },
+            { emoji: '✨', top: '120px', right: '120px', size: '12px', animation: 'twinkle 1.5s ease-in-out infinite 0.7s' },
+          ],
+        },
+        ocean: {
+          name: '🌊 Ocean',
+          background: 'linear-gradient(180deg, #87CEEB 0%, #1E90FF 30%, #0066AA 100%)',
+          ground: '#0055AA',
+          groundBase: '#003366',
+          items: ['🐠', '🐟', '🐡', '🦈', '🐙', '🦑', '🦀', '🦞', '🐚', '🐬', '🐳', '🦭', '🧜‍♀️', '🪼'],
+          decorations: [
+            { emoji: '☀️', top: '15px', right: '25px', size: '45px', animation: 'float 4s ease-in-out infinite' },
+            { emoji: '🏝️', top: '60px', left: '20px', size: '35px', animation: 'none' },
+            { emoji: '🌊', bottom: '80px', left: '30px', size: '30px', animation: 'wave 2s ease-in-out infinite' },
+            { emoji: '🌊', bottom: '90px', right: '50px', size: '25px', animation: 'wave 2s ease-in-out infinite 0.5s' },
+            { emoji: '🫧', bottom: '120px', left: '100px', size: '20px', animation: 'rise 3s ease-in-out infinite' },
+            { emoji: '🫧', bottom: '150px', right: '80px', size: '15px', animation: 'rise 3s ease-in-out infinite 1s' },
+          ],
+        },
+        farm: {
+          name: '🚜 Farm',
+          background: 'linear-gradient(180deg, #87CEEB 0%, #F5DEB3 100%)',
+          ground: '#8B7355',
+          groundBase: '#654321',
+          items: ['🐄', '🐖', '🐑', '🐓', '🐔', '🐣', '🐴', '🐐', '🦃', '🐇', '🦆', '🐕'],
+          decorations: [
+            { emoji: '☀️', top: '20px', right: '30px', size: '50px', animation: 'float 4s ease-in-out infinite' },
+            { emoji: '🌾', bottom: '70px', left: '30px', size: '35px', animation: 'wave 3s ease-in-out infinite' },
+            { emoji: '🌾', bottom: '75px', left: '70px', size: '30px', animation: 'wave 3s ease-in-out infinite 0.3s' },
+            { emoji: '🏠', top: '80px', right: '30px', size: '40px', animation: 'none' },
+            { emoji: '🚜', bottom: '65px', right: '100px', size: '35px', animation: 'none' },
+          ],
+        },
+        jungle: {
+          name: '🌴 Jungle',
+          background: 'linear-gradient(180deg, #228B22 0%, #006400 50%, #004d00 100%)',
+          ground: '#2d5a27',
+          groundBase: '#1a3d1a',
+          items: ['🦁', '🐯', '🐘', '🦒', '🦓', '🐒', '🦜', '🦩', '🐊', '🦎', '🦋', '🐍'],
+          decorations: [
+            { emoji: '🌴', top: '40px', left: '20px', size: '50px', animation: 'wave 4s ease-in-out infinite' },
+            { emoji: '🌴', top: '60px', right: '30px', size: '45px', animation: 'wave 4s ease-in-out infinite 1s' },
+            { emoji: '🌺', top: '100px', left: '80px', size: '25px', animation: 'float 3s ease-in-out infinite' },
+            { emoji: '🍃', top: '30px', left: '150px', size: '20px', animation: 'leafFall 4s ease-in-out infinite' },
+            { emoji: '☀️', top: '15px', right: '80px', size: '35px', animation: 'float 5s ease-in-out infinite' },
+          ],
+        },
+      };
+
+      const currentTheme = themes[theme];
+
+      const spawnItem = (e) => {
+        playSound('pop');
+        const rect = e.currentTarget.getBoundingClientRect();
+        const x = ((e.clientX || e.touches?.[0]?.clientX || 0) - rect.left) / rect.width * 100;
+        const y = ((e.clientY || e.touches?.[0]?.clientY || 0) - rect.top) / rect.height * 100;
+        const newItem = {
+          id: nextId,
+          emoji: currentTheme.items[Math.floor(Math.random() * currentTheme.items.length)],
+          x, y,
+          size: 40 + Math.random() * 30
+        };
+        setSpawnedItems(prev => [...prev, newItem]);
+        setNextId(nextId + 1);
+        setTimeout(() => { setSpawnedItems(prev => prev.filter(a => a.id !== newItem.id)); }, 8000);
+      };
+
+      return (
+        <div style={{ display: 'flex', flexDirection: 'column', alignItems: 'center', gap: '15px', padding: '20px' }}>
+          <button onClick={() => { playSound('tap'); onBack(); }} style={{ position: 'absolute', top: '20px', left: '20px', fontSize: '40px', background: 'none', border: 'none', cursor: 'pointer', zIndex: 100 }}>⬅️</button>
+
+          <h2 style={{ fontSize: '36px', fontFamily: '"Fredoka One", cursive', color: '#FFB347', margin: 0 }}>🎪 Tap to Play! 🎈</h2>
+
+          {/* Theme selector */}
+          <div style={{ display: 'flex', gap: '8px', flexWrap: 'wrap', justifyContent: 'center' }}>
+            {Object.entries(themes).map(([key, t]) => (
+              <button
+                key={key}
+                onClick={() => { playSound('tap'); setTheme(key); setSpawnedItems([]); }}
+                style={{
+                  padding: '8px 16px',
+                  borderRadius: '20px',
+                  border: 'none',
+                  background: theme === key ? '#FFB347' : 'rgba(255,255,255,0.7)',
+                  color: theme === key ? 'white' : '#666',
+                  fontFamily: '"Fredoka One", cursive',
+                  fontSize: '14px',
+                  cursor: 'pointer',
+                  transition: 'all 0.2s',
+                }}
+              >
+                {t.name}
+              </button>
+            ))}
+          </div>
+
+          <div
+            onClick={spawnItem}
+            style={{
+              width: '100%',
+              maxWidth: '500px',
+              height: '350px',
+              background: currentTheme.background,
+              borderRadius: '30px',
+              position: 'relative',
+              overflow: 'hidden',
+              cursor: 'pointer',
+              boxShadow: 'inset 0 0 50px rgba(0,0,0,0.2)',
+            }}
+          >
+            {/* Ground */}
+            <div style={{
+              position: 'absolute',
+              bottom: 0,
+              left: 0,
+              right: 0,
+              height: '50px',
+              background: currentTheme.groundBase,
+              borderRadius: '0 0 30px 30px'
+            }}>
+              <div style={{
+                position: 'absolute',
+                top: '-12px',
+                left: 0,
+                right: 0,
+                height: '25px',
+                background: currentTheme.ground,
+                borderRadius: '50% 50% 0 0'
+              }} />
+            </div>
+
+            {/* Theme decorations */}
+            {currentTheme.decorations.map((dec, i) => (
+              <div
+                key={i}
+                style={{
+                  position: 'absolute',
+                  top: dec.top,
+                  left: dec.left,
+                  right: dec.right,
+                  bottom: dec.bottom,
+                  fontSize: dec.size,
+                  animation: dec.animation,
+                  opacity: 0.9,
+                }}
+              >
+                {dec.emoji}
+              </div>
+            ))}
+
+            {/* Spawned items */}
+            {spawnedItems.map(item => (
+              <div
+                key={item.id}
+                style={{
+                  position: 'absolute',
+                  left: `${item.x}%`,
+                  top: `${item.y}%`,
+                  fontSize: `${item.size}px`,
+                  transform: 'translate(-50%, -50%)',
+                  animation: 'animalBounce 8s ease-out forwards',
+                  pointerEvents: 'none'
+                }}
+              >
+                {item.emoji}
+              </div>
+            ))}
+
+            {/* Tap hint */}
+            {spawnedItems.length === 0 && (
+              <div style={{
+                position: 'absolute',
+                top: '50%',
+                left: '50%',
+                transform: 'translate(-50%, -50%)',
+                fontSize: '60px',
+                opacity: 0.3,
+                animation: 'pulse 2s ease-in-out infinite'
+              }}>
+                👆
+              </div>
+            )}
+          </div>
+
+          <button
+            onClick={() => { playSound('tap'); setSpawnedItems([]); }}
+            style={{
+              padding: '12px 30px',
+              borderRadius: '25px',
+              border: 'none',
+              background: 'linear-gradient(145deg, #FFB347, #FFA07A)',
+              fontSize: '20px',
+              fontFamily: '"Fredoka One", cursive',
+              color: 'white',
+              cursor: 'pointer'
+            }}
+          >
+            🧹 Clear All
+          </button>
+        </div>
+      );
+    };
+
+    const ColorsGame = ({ difficulty, onBack }) => {
+      // Primary colors for easy mode
+      const primaryColors = [
+        { name: 'Red', hex: '#FF6B6B', emoji: '🔴', items: ['🍎', '🍓', '❤️', '🌹', '🍒'] },
+        { name: 'Blue', hex: '#4A90D9', emoji: '🔵', items: ['🫐', '💙', '🧢', '💎', '🐋'] },
+        { name: 'Yellow', hex: '#F9D56E', emoji: '🟡', items: ['🍋', '⭐', '🌟', '🍌', '🌻'] },
+      ];
+
+      // Secondary colors added for medium mode
+      const secondaryColors = [
+        { name: 'Green', hex: '#4CAF50', emoji: '🟢', items: ['🥒', '🥦', '🍀', '💚', '🌲'] },
+        { name: 'Orange', hex: '#FF9800', emoji: '🟠', items: ['🍊', '🥕', '🎃', '🧡', '🏀'] },
+        { name: 'Purple', hex: '#9C27B0', emoji: '🟣', items: ['🍇', '🍆', '💜', '☂️', '🔮'] },
+      ];
+
+      // Harder colors for hard mode
+      const advancedColors = [
+        { name: 'Pink', hex: '#E91E63', emoji: '🩷', items: ['🌸', '🎀', '💗', '🩰', '🦩'] },
+        { name: 'Brown', hex: '#795548', emoji: '🟤', items: ['🍫', '🥜', '🏈', '🧸', '🌰'] },
+        { name: 'Black', hex: '#424242', emoji: '⚫', items: ['🖤', '🎱', '🕶️', '🦇', '🎩'] },
+        { name: 'White', hex: '#E0E0E0', emoji: '⚪', items: ['🤍', '☁️', '🥚', '🦢', '⛄'] },
+      ];
+
+      // Helper to get readable text color (dark text for light colors)
+      const getTextColor = (colorName) => {
+        const lightColors = ['Yellow', 'White'];
+        return lightColors.includes(colorName) ? '#555' : colorName === 'Blue' ? '#2563eb' : null;
+      };
+
+      // Get colors based on difficulty
+      const getColorsForDifficulty = () => {
+        if (difficulty === 'easy') return primaryColors;
+        if (difficulty === 'medium') return [...primaryColors, ...secondaryColors];
+        return [...primaryColors, ...secondaryColors, ...advancedColors];
+      };
+
+      const availableColors = getColorsForDifficulty();
+
+      const [score, setScore] = useState(0);
+      const [targetColor, setTargetColor] = useState(availableColors[0]);
+      const [targetItem, setTargetItem] = useState('');
+      const [options, setOptions] = useState([]);
+      const [feedback, setFeedback] = useState(null);
+      const [celebrating, setCelebrating] = useState(false);
+      const [showItemMode, setShowItemMode] = useState(true); // true = show item, find color; false = show color name, find item
+
+      const generateRound = useCallback(() => {
+        const colors = getColorsForDifficulty();
+        const target = colors[Math.floor(Math.random() * colors.length)];
+        const item = target.items[Math.floor(Math.random() * target.items.length)];
+
+        // Alternate between modes, but easy always shows item, hard always shows item (to read color names)
+        const useItemMode = difficulty === 'easy' ? true : difficulty === 'hard' ? true : Math.random() > 0.4;
+
+        const numOptions = difficulty === 'easy' ? 3 : difficulty === 'medium' ? 4 : 5;
+        const opts = [target];
+        while (opts.length < numOptions) {
+          const opt = colors[Math.floor(Math.random() * colors.length)];
+          if (!opts.find(o => o.name === opt.name)) opts.push(opt);
+        }
+
+        setTargetColor(target);
+        setTargetItem(item);
+        setShowItemMode(useItemMode);
+        setOptions(opts.sort(() => Math.random() - 0.5));
+        setFeedback(null);
+      }, [difficulty]);
+
+      useEffect(() => { generateRound(); }, [generateRound]);
+
+      const handleChoice = (chosen) => {
+        playSound('tap');
+        if (chosen.name === targetColor.name) {
+          playSound('correct');
+          setScore(score + 1);
+          setFeedback('correct');
+          setCelebrating(true);
+          setTimeout(() => { setCelebrating(false); generateRound(); }, 1500);
+        } else {
+          playSound('wrong');
+          setFeedback('wrong');
+          setTimeout(() => setFeedback(null), 800);
+        }
+      };
+
+      return (
+        <div style={{ display: 'flex', flexDirection: 'column', alignItems: 'center', gap: '20px', padding: '20px' }}>
+          <Celebration active={celebrating} />
+          <button onClick={() => { playSound('tap'); onBack(); }} style={{ position: 'absolute', top: '20px', left: '20px', fontSize: '40px', background: 'none', border: 'none', cursor: 'pointer' }}>⬅️</button>
+
+          <div style={{ fontSize: '28px', fontFamily: '"Fredoka One", cursive', color: '#87CEEB' }}>⭐ {score}</div>
+
+          <h2 style={{ fontSize: '32px', fontFamily: '"Fredoka One", cursive', color: '#87CEEB', margin: 0, textAlign: 'center' }}>
+            {showItemMode ? '🎨 What Color? 🌈' : `🔍 Find ${targetColor.name}!`}
+          </h2>
+
+          {/* Show the target - either an item to identify or a color name to find */}
+          <div style={{
+            background: 'rgba(255,255,255,0.7)',
+            padding: '25px 50px',
+            borderRadius: '25px',
+            display: 'flex',
+            flexDirection: 'column',
+            alignItems: 'center',
+            gap: '10px',
+          }}>
+            {showItemMode ? (
+              // Show item, user picks the color
+              <span style={{ fontSize: '100px', display: 'block', animation: 'bounce 1s infinite' }}>{targetItem}</span>
+            ) : (
+              // Show color name and emoji, user picks matching item
+              <>
+                <span style={{ fontSize: '70px', animation: 'bounce 1s infinite' }}>{targetColor.emoji}</span>
+                <span style={{
+                  fontSize: '36px',
+                  fontFamily: '"Fredoka One", cursive',
+                  color: getTextColor(targetColor.name) || targetColor.hex,
+                  textShadow: '2px 2px 4px rgba(0,0,0,0.3)',
+                }}>
+                  {targetColor.name}
+                </span>
+              </>
+            )}
+          </div>
+
+          {/* Answer options */}
+          <div style={{ display: 'flex', gap: '15px', flexWrap: 'wrap', justifyContent: 'center', maxWidth: '450px' }}>
+            {options.map((opt, i) => (
+              <button
+                key={i}
+                onClick={() => handleChoice(opt)}
+                style={{
+                  width: difficulty === 'hard' ? '100px' : '90px',
+                  height: difficulty === 'hard' ? '60px' : '90px',
+                  borderRadius: difficulty === 'hard' ? '20px' : '25px',
+                  border: 'none',
+                  background: difficulty === 'hard'
+                    ? 'linear-gradient(145deg, #ffffff, #f0f0f0)'
+                    : `linear-gradient(145deg, ${opt.hex}, ${adjustColor(opt.hex, -20)})`,
+                  boxShadow: '8px 8px 20px rgba(0,0,0,0.1), -3px -3px 10px rgba(255,255,255,0.5)',
+                  fontSize: difficulty === 'hard' ? '20px' : (showItemMode ? '40px' : '50px'),
+                  fontFamily: '"Fredoka One", cursive',
+                  color: difficulty === 'hard' ? '#333' : 'white',
+                  cursor: 'pointer',
+                  display: 'flex',
+                  flexDirection: 'column',
+                  alignItems: 'center',
+                  justifyContent: 'center',
+                  transition: 'transform 0.2s',
+                  animation: `popIn 0.3s ease-out ${i * 0.08}s both`,
+                }}
+              >
+                {difficulty === 'hard' ? (
+                  // Hard mode: just show the color name as text
+                  <span>{opt.name}</span>
+                ) : showItemMode ? (
+                  // Easy/Medium: Show color circle, optionally with name
+                  <>
+                    {opt.emoji}
+                    {difficulty === 'easy' && (
+                      <span style={{ fontSize: '12px', fontFamily: '"Fredoka One", cursive', color: 'white', textShadow: '1px 1px 2px rgba(0,0,0,0.5)' }}>
+                        {opt.name}
+                      </span>
+                    )}
+                  </>
+                ) : (
+                  // Show item from that color category
+                  <span>{opt.items[Math.floor(Math.random() * opt.items.length)]}</span>
+                )}
+              </button>
+            ))}
+          </div>
+
+          {feedback === 'correct' && (
+            <div style={{ fontSize: '48px', animation: 'bounce 0.3s' }}>
+              ✅ {encouragements[Math.floor(Math.random() * encouragements.length)]} 🎉
+            </div>
+          )}
+          {feedback === 'wrong' && (
+            <div style={{ fontSize: '48px', animation: 'shake 0.3s' }}>Try again! 💪</div>
+          )}
+        </div>
+      );
+    };
+
+    const DifficultySelector = ({ difficulty, setDifficulty }) => (
+      <div style={{ display: 'flex', gap: '10px', background: 'rgba(255,255,255,0.5)', padding: '10px', borderRadius: '50px' }}>
+        {[{ id: 'easy', emoji: '🌱', label: 'Easy' }, { id: 'medium', emoji: '🌿', label: 'Medium' }, { id: 'hard', emoji: '🌳', label: 'Hard' }].map((level) => (
+          <button key={level.id} onClick={() => { playSound('tap'); setDifficulty(level.id); }} style={{
+            padding: '10px 20px', borderRadius: '30px', border: 'none',
+            background: difficulty === level.id ? '#FF6B9D' : 'transparent',
+            color: difficulty === level.id ? 'white' : '#666',
+            fontFamily: '"Fredoka One", cursive', fontSize: '16px', cursor: 'pointer',
+          }}>{level.emoji} {level.label}</button>
+        ))}
+      </div>
+    );
+
+    function Countimals() {
+      const [mode, setMode] = useState('home');
+      const [difficulty, setDifficulty] = useState('easy');
+
+      return (
+        <div style={{ minHeight: '100vh', background: 'linear-gradient(135deg, #FFF5F5 0%, #F0FFFF 50%, #FFFEF0 100%)', display: 'flex', flexDirection: 'column', alignItems: 'center', padding: '20px', fontFamily: '"Fredoka One", cursive' }}>
+          <style>{`
+            @import url('https://fonts.googleapis.com/css2?family=Fredoka+One&display=swap');
+            @keyframes popIn { 0% { transform: scale(0); opacity: 0; } 70% { transform: scale(1.1); } 100% { transform: scale(1); opacity: 1; } }
+            @keyframes bounce { 0%, 100% { transform: translateY(0); } 50% { transform: translateY(-20px); } }
+            @keyframes float { 0%, 100% { transform: translateY(0); } 50% { transform: translateY(-15px); } }
+            @keyframes wave { 0%, 100% { transform: rotate(-5deg); } 50% { transform: rotate(5deg); } }
+            @keyframes fall { 0% { transform: translateY(0) rotate(0deg); opacity: 1; } 100% { transform: translateY(100vh) rotate(720deg); opacity: 0; } }
+            @keyframes shake { 0%, 100% { transform: translateX(0); } 25% { transform: translateX(-10px); } 75% { transform: translateX(10px); } }
+            @keyframes animalBounce { 0% { opacity: 1; transform: translate(-50%, -50%) scale(0); } 15% { opacity: 1; transform: translate(-50%, -50%) scale(1.3); } 30% { opacity: 1; transform: translate(-50%, calc(-50% + 30px)) scale(1); } 50% { opacity: 1; transform: translate(-50%, calc(-50% + 10px)) scale(1.05); } 70% { opacity: 0.9; transform: translate(-50%, calc(-50% + 40px)) scale(1); } 85% { opacity: 0.5; transform: translate(-50%, calc(-50% + 60px)) scale(0.9); } 100% { opacity: 0; transform: translate(-50%, calc(-50% + 100px)) scale(0.5); } }
+            @keyframes pulse { 0%, 100% { transform: translate(-50%, -50%) scale(1); opacity: 0.3; } 50% { transform: translate(-50%, -50%) scale(1.2); opacity: 0.5; } }
+            @keyframes twinkle { 0%, 100% { opacity: 1; transform: scale(1); } 50% { opacity: 0.3; transform: scale(0.8); } }
+            @keyframes rise { 0% { opacity: 0.8; transform: translateY(0); } 100% { opacity: 0; transform: translateY(-100px); } }
+            @keyframes leafFall { 0% { opacity: 1; transform: translateY(0) rotate(0deg); } 100% { opacity: 0; transform: translateY(150px) rotate(360deg); } }
+            * { -webkit-tap-highlight-color: transparent; user-select: none; }
+          `}</style>
+          <div style={{ position: 'relative', zIndex: 1, width: '100%', maxWidth: '600px' }}>
+            {mode === 'home' && <><HomeScreen onSelectMode={setMode} /><div style={{ display: 'flex', justifyContent: 'center', marginTop: '20px' }}><DifficultySelector difficulty={difficulty} setDifficulty={setDifficulty} /></div></>}
+            {mode === 'counting' && <CountingGame difficulty={difficulty} onBack={() => setMode('home')} />}
+            {mode === 'moreless' && <MoreLessGame difficulty={difficulty} onBack={() => setMode('home')} />}
+            {mode === 'addition' && <AdditionGame difficulty={difficulty} onBack={() => setMode('home')} />}
+            {mode === 'subtraction' && <SubtractionGame difficulty={difficulty} onBack={() => setMode('home')} />}
+            {mode === 'maketen' && <MakeTenGame difficulty={difficulty} onBack={() => setMode('home')} />}
+            {mode === 'playground' && <PlaygroundMode onBack={() => setMode('home')} />}
+            {mode === 'colors' && <ColorsGame difficulty={difficulty} onBack={() => setMode('home')} />}
+          </div>
+        </div>
+      );
+    }
+
+    const root = ReactDOM.createRoot(document.getElementById('root'));
+    root.render(<Countimals />);
+  </script>
+</body>
+</html>
